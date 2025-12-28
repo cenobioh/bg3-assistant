@@ -271,6 +271,7 @@ const LOCATION_TO_ACT: { [key: string]: number } = {
   'Highberry\'s Home': 3,
   'Stormshore Armoury': 3,
   'Stormshore Armory': 3,
+  'Jungle': 3,
 };
 
 /**
@@ -488,6 +489,7 @@ export async function determineActFromLocation(locationText: string | undefined)
     'stormshore armoury': 3,
     'stormshore armory': 3,
     'stormshore': 3,
+    'jungle': 3,
   };
   
   // Sort keywords by length (longest first) to prioritize more specific matches
