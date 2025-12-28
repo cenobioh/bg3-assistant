@@ -17,9 +17,13 @@ function normalizeRarityClass(rarity: string): string {
     .replace(/[^a-z0-9-]/g, '');
 }
 
+type SortOption = 'default' | 'alphabetical' | 'rarity';
+
 export function ItemChecklist({ items, onToggle, onRemove, onMarkActComplete }: ItemChecklistProps) {
   // Track which acts are expanded (default to all expanded)
   const [expandedActs, setExpandedActs] = useState<Set<string>>(new Set(['act1', 'act2', 'act3', 'unknown']));
+  // Track sort option
+  const [sortOption, setSortOption] = useState<SortOption>('default');
 
   const toggleAct = (actKey: string) => {
     setExpandedActs(prev => {
@@ -64,21 +68,64 @@ export function ItemChecklist({ items, onToggle, onRemove, onMarkActComplete }: 
     }
   });
 
-  // Sort items within each Act: non-collected first, collected at the bottom
-  const sortItemsByCollected = (items: Item[]): Item[] => {
-    return [...items].sort((a, b) => {
-      if (a.collected === b.collected) {
-        return 0;
+  /**
+   * Get rarity order for sorting (lower number = lower rarity)
+   */
+  const getRarityOrder = (rarity: string | undefined): number => {
+    if (!rarity) return 0; // No rarity = lowest priority
+    const rarityLower = rarity.toLowerCase().trim();
+    const rarityMap: { [key: string]: number } = {
+      'common': 1,
+      'uncommon': 2,
+      'rare': 3,
+      'very rare': 4,
+      'very-rare': 4,
+      'legendary': 5,
+      'story': 6,
+    };
+    return rarityMap[rarityLower] || 0;
+  };
+
+  /**
+   * Sort items based on the selected sort option
+   * Always maintains: non-collected first, collected at the bottom
+   */
+  const sortItems = (items: Item[]): Item[] => {
+    const sorted = [...items].sort((a, b) => {
+      // First, always sort by collected status (non-collected first)
+      if (a.collected !== b.collected) {
+        return a.collected ? 1 : -1;
       }
-      return a.collected ? 1 : -1;
+      
+      // Then apply the selected sort option
+      switch (sortOption) {
+        case 'alphabetical':
+          return a.name.localeCompare(b.name);
+        
+        case 'rarity':
+          const rarityA = getRarityOrder(a.rarity);
+          const rarityB = getRarityOrder(b.rarity);
+          if (rarityA !== rarityB) {
+            return rarityB - rarityA; // Higher rarity first
+          }
+          // If same rarity, sort alphabetically
+          return a.name.localeCompare(b.name);
+        
+        case 'default':
+        default:
+          // Default: just by collected status (already handled above)
+          return 0;
+      }
     });
+    
+    return sorted;
   };
 
   const actSections = [
-    { key: 'act1', label: 'Act 1', items: sortItemsByCollected(itemsByAct.act1) },
-    { key: 'act2', label: 'Act 2', items: sortItemsByCollected(itemsByAct.act2) },
-    { key: 'act3', label: 'Act 3', items: sortItemsByCollected(itemsByAct.act3) },
-    { key: 'unknown', label: 'Unknown Act', items: sortItemsByCollected(itemsByAct.unknown) },
+    { key: 'act1', label: 'Act 1', items: sortItems(itemsByAct.act1) },
+    { key: 'act2', label: 'Act 2', items: sortItems(itemsByAct.act2) },
+    { key: 'act3', label: 'Act 3', items: sortItems(itemsByAct.act3) },
+    { key: 'unknown', label: 'Unknown Act', items: sortItems(itemsByAct.unknown) },
   ].filter(section => section.items.length > 0); // Only show sections with items
 
   // Calculate per-act progress
@@ -92,8 +139,24 @@ export function ItemChecklist({ items, onToggle, onRemove, onMarkActComplete }: 
     <div className="checklist-container">
       <div className="checklist-header">
         <h2>Item Checklist</h2>
-        <div className="progress">
-          {collectedCount} / {totalCount} collected
+        <div className="checklist-header-controls">
+          <div className="sort-control">
+            <label htmlFor="sort-select" className="sort-label">Sort by:</label>
+            <select
+              id="sort-select"
+              className="sort-select"
+              value={sortOption}
+              onChange={(e) => setSortOption(e.target.value as SortOption)}
+              aria-label="Sort items"
+            >
+              <option value="default">Default (Collected Status)</option>
+              <option value="alphabetical">Alphabetical</option>
+              <option value="rarity">Rarity</option>
+            </select>
+          </div>
+          <div className="progress">
+            {collectedCount} / {totalCount} collected
+          </div>
         </div>
       </div>
       <div className="progress-bar">
