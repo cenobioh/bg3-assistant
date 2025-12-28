@@ -74,6 +74,7 @@ export function AddItemForm({ onAdd }: AddItemFormProps) {
         rarity: item.rarity,
         uuid: item.uuid,
         description: item.description,
+        act: item.act,
       };
       onAdd(itemData);
       // Reset form after adding
@@ -161,6 +162,7 @@ export function AddItemForm({ onAdd }: AddItemFormProps) {
         rarity: selectedItem.rarity,
         uuid: selectedItem.uuid,
         description: selectedItem.description,
+        act: selectedItem.act,
       };
     } else if (!manualMode) {
       // Try to fetch the item if not in manual mode
@@ -172,6 +174,7 @@ export function AddItemForm({ onAdd }: AddItemFormProps) {
           rarity: wikiItem.rarity,
           uuid: wikiItem.uuid,
           description: wikiItem.description,
+          act: wikiItem.act,
         };
       }
     }

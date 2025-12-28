@@ -4,6 +4,7 @@ export interface WikiItem {
   uuid?: string;
   description?: string;
   where_to_find?: string;
+  act?: number; // Act 1, 2, or 3
 }
 
 interface SearchResponse {
@@ -196,6 +197,284 @@ function extractSectionFromHTML(html: string, anchorId: string): string | null {
 }
 
 /**
+ * Known location to Act mapping
+ * This is a fallback for common locations
+ */
+const LOCATION_TO_ACT: { [key: string]: number } = {
+  // Act 1 locations
+  'Emerald Grove': 1,
+  'Druid Grove': 1,
+  'Grove': 1,
+  'The Hollow': 1,
+  'Hollow': 1,
+  'Shattered Sanctum': 1,
+  'Goblin Camp': 1,
+  'Blighted Village': 1,
+  'Waukeen\'s Rest': 1,
+  'Risen Road': 1,
+  'Mountain Pass': 1,
+  'Underdark': 1,
+  'The Underdark': 1,
+  'Grymforge': 1,
+  'Creche Y\'llek': 1,
+  'Rosymorn Monastery': 1,
+  'Rosymorn Monastery Trail': 1,
+  'Arcane Tower': 1,
+  'Myconid Colony': 1,
+  'Ebonlake Grotto': 1,
+  'Adamantine Forge': 1,
+  'Sussur Tree': 1,
+  'Selûnite Outpost': 1,
+  'Decrepit Village': 1,
+  'Festering Cove': 1,
+  'Beach': 1,
+  'Nautiloid': 1,
+  'Ravaged Beach': 1,
+  'Overgrown Ruins': 1,
+  'Roadside Cliffs': 1,
+  'Dank Crypt': 1,
+  'Defiled Temple': 1,
+  
+  // Act 2 locations
+  'Shadow-Cursed Lands': 2,
+  'Last Light Inn': 2,
+  'Moonrise Towers': 2,
+  'Reithwin Town': 2,
+  'House of Healing': 2,
+  'Gauntlet of Shar': 2,
+  'Thorm Mausoleum': 2,
+  'Temple of Shar': 2,
+  'Grand Mausoleum': 2,
+  'Ketheric Thorm': 2,
+  
+  // Act 3 locations
+  'Baldur\'s Gate': 3,
+  'Rivington': 3,
+  'Wyrm\'s Crossing': 3,
+  'Lower City': 3,
+  'Upper City': 3,
+  'Crimson Palace': 3,
+  'House of Hope': 3,
+  'Cazador\'s Palace': 3,
+  'Sorcerous Sundries': 3,
+  'Temple of Bhaal': 3,
+  'High Hall': 3,
+};
+
+/**
+ * Extract location names from location text
+ * Tries to identify location names from patterns like "Location Name - details"
+ */
+function extractLocationNames(locationText: string): string[] {
+  if (!locationText) return [];
+  
+  const locations: string[] = [];
+  
+  // Split by common separators
+  const parts = locationText.split(/[|,;]/).map(p => p.trim());
+  
+  for (const part of parts) {
+    // Try multiple patterns to extract location name
+    // Pattern 1: "Location Name - details" or "Location Name: details"
+    let match = part.match(/^([^-:]+?)(?:\s*[-:]\s*|(?:\s+in\s+|\s+at\s+))/i);
+    if (match) {
+      const locationName = match[1].trim();
+      if (locationName.length > 2) {
+        locations.push(locationName);
+        // Also try without "The" prefix if present
+        if (locationName.toLowerCase().startsWith('the ')) {
+          locations.push(locationName.substring(4).trim());
+        }
+      }
+    }
+    
+    // Pattern 2: Look for location names in the middle of text (e.g., "Found in Underdark")
+    const inMatch = part.match(/\b(in|at|within|inside|near|around)\s+([A-Z][a-zA-Z\s]+?)(?:\s|$|,|\.|;)/i);
+    if (inMatch) {
+      const locationName = inMatch[2].trim();
+      if (locationName.length > 2 && !locationName.toLowerCase().includes('found')) {
+        locations.push(locationName);
+        // Also try without "The" prefix
+        if (locationName.toLowerCase().startsWith('the ')) {
+          locations.push(locationName.substring(4).trim());
+        }
+      }
+    }
+    
+    // Pattern 3: If no separator found, check if the whole part is a location name
+    if (!match && !inMatch) {
+      // Remove common words that aren't location names
+      const cleaned = part.replace(/\b(found|located|obtained|acquired|purchased|sold|dropped|rewarded)\b/gi, '').trim();
+      if (cleaned.length > 2 && !cleaned.toLowerCase().includes('chest') && !cleaned.toLowerCase().includes('vendor')) {
+        locations.push(cleaned);
+        // Also try without "The" prefix
+        if (cleaned.toLowerCase().startsWith('the ')) {
+          locations.push(cleaned.substring(4).trim());
+        }
+      }
+    }
+  }
+  
+  return locations;
+}
+
+/**
+ * Determine Act from location text
+ * First tries known location mapping, then attempts to query wiki
+ * Exported for testing purposes
+ */
+export async function determineActFromLocation(locationText: string | undefined): Promise<number | undefined> {
+  if (!locationText) {
+    console.log('[Act Detection] No location text provided');
+    return undefined;
+  }
+  
+  // Normalize the text - remove extra whitespace
+  const normalizedText = locationText.trim();
+  
+  // Debug logging for all location text (temporary for debugging)
+  console.log('[Act Detection] Processing location text:', normalizedText);
+  
+  // First, check for explicit Act mentions in campsite locations
+  // Patterns: "Campsite (Act One)", "Campsite (Act Two)", "Campsite (Act 3)", etc.
+  const campsiteActMatch = normalizedText.match(/campsite.*?\(act\s*(one|two|three|1|2|3)\)/i);
+  if (campsiteActMatch) {
+    const actText = campsiteActMatch[1].toLowerCase();
+    let actNumber: number | undefined;
+    if (actText === 'one' || actText === '1') {
+      actNumber = 1;
+    } else if (actText === 'two' || actText === '2') {
+      actNumber = 2;
+    } else if (actText === 'three' || actText === '3') {
+      actNumber = 3;
+    }
+    if (actNumber) {
+      console.log('[Act Detection] Found explicit Act in campsite location:', actNumber);
+      return actNumber;
+    }
+  }
+  
+  // Also try a more general pattern for any "Act X" mention in the location text
+  const generalActPattern = /\(act\s*(one|two|three|1|2|3)\)/i;
+  const generalMatch = normalizedText.match(generalActPattern);
+  if (generalMatch) {
+    const actText = generalMatch[1].toLowerCase();
+    let actNumber: number | undefined;
+    if (actText === 'one' || actText === '1') {
+      actNumber = 1;
+    } else if (actText === 'two' || actText === '2') {
+      actNumber = 2;
+    } else if (actText === 'three' || actText === '3') {
+      actNumber = 3;
+    }
+    if (actNumber) {
+      console.log('[Act Detection] Found explicit Act number in location:', actNumber);
+      return actNumber;
+    }
+  }
+  
+  // Extract location names from the text
+  const locationNames = extractLocationNames(normalizedText);
+  console.log('[Act Detection] Extracted location names:', locationNames);
+  
+  // First, try known location mapping with extracted names
+  for (const locationName of locationNames) {
+    // Try exact match
+    if (LOCATION_TO_ACT[locationName]) {
+      console.log('[Act Detection] Found exact match:', locationName, '-> Act', LOCATION_TO_ACT[locationName]);
+      return LOCATION_TO_ACT[locationName];
+    }
+    
+    // Try case-insensitive match
+    const lowerLocation = locationName.toLowerCase().trim();
+    for (const [knownLocation, act] of Object.entries(LOCATION_TO_ACT)) {
+      if (knownLocation.toLowerCase() === lowerLocation) {
+        console.log('[Act Detection] Found case-insensitive match:', locationName, '-> Act', act);
+        return act;
+      }
+    }
+    
+    // Try partial match (e.g., "Emerald Grove area" matches "Emerald Grove")
+    for (const [knownLocation, act] of Object.entries(LOCATION_TO_ACT)) {
+      const lowerKnown = knownLocation.toLowerCase();
+      // Check if location contains known location or vice versa
+      if (lowerLocation.includes(lowerKnown) || lowerKnown.includes(lowerLocation)) {
+        console.log('[Act Detection] Found partial match:', locationName, '-> Act', act);
+        return act;
+      }
+      // Also try matching without "The" prefix
+      const locationWithoutThe = lowerLocation.replace(/^the\s+/, '').trim();
+      const knownWithoutThe = lowerKnown.replace(/^the\s+/, '').trim();
+      if (locationWithoutThe && knownWithoutThe && 
+          (locationWithoutThe.includes(knownWithoutThe) || knownWithoutThe.includes(locationWithoutThe))) {
+        console.log('[Act Detection] Found match without "The" prefix:', locationName, '-> Act', act);
+        return act;
+      }
+    }
+  }
+  
+  // Last resort: search the entire location text for known location names
+  const lowerText = normalizedText.toLowerCase();
+  console.log('[Act Detection] Searching full text for location matches:', lowerText);
+  
+  // First, try exact location name matches
+  for (const [knownLocation, act] of Object.entries(LOCATION_TO_ACT)) {
+    const lowerKnown = knownLocation.toLowerCase();
+    // Direct match in text
+    if (lowerText.includes(lowerKnown)) {
+      console.log('[Act Detection] Found in full text (exact):', knownLocation, '-> Act', act);
+      return act;
+    }
+    // Try without "The" prefix
+    const knownWithoutThe = lowerKnown.replace(/^the\s+/, '').trim();
+    if (knownWithoutThe && lowerText.includes(knownWithoutThe)) {
+      console.log('[Act Detection] Found in full text (without "The"):', knownLocation, '-> Act', act);
+      return act;
+    }
+    // Also try word boundary matching for better accuracy
+    const escapedKnown = knownWithoutThe.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const wordBoundaryRegex = new RegExp(`\\b${escapedKnown}\\b`, 'i');
+    if (knownWithoutThe && wordBoundaryRegex.test(lowerText)) {
+      console.log('[Act Detection] Found in full text (word boundary):', knownLocation, '-> Act', act);
+      return act;
+    }
+  }
+  
+  // Special handling for common location keywords that might appear in different formats
+  // This is a fallback for cases where the location name isn't extracted properly
+  const locationKeywords: { [key: string]: number } = {
+    'underdark': 1,
+    'emerald grove': 1,
+    'druid grove': 1,
+    'the hollow': 1,
+    'hollow': 1,
+    'defiled temple': 1,
+    'grymforge': 1,
+    'mountain pass': 1,
+    'shadow-cursed': 2,
+    'shadow cursed': 2,
+    'moonrise': 2,
+    'baldur\'s gate': 3,
+    'baldurs gate': 3,
+    'lower city': 3,
+    'upper city': 3,
+  };
+  
+  for (const [keyword, act] of Object.entries(locationKeywords)) {
+    if (lowerText.includes(keyword)) {
+      console.log('[Act Detection] Found keyword match:', keyword, '-> Act', act);
+      return act;
+    }
+  }
+  
+  // If no match found, try to query wiki for location pages
+  // This is more expensive, so we'll do it asynchronously and cache results
+  // For now, return undefined if we can't determine from known locations
+  console.log('[Act Detection] No match found for:', normalizedText);
+  return undefined;
+}
+
+/**
  * Extract "where to find" information from rendered HTML
  * Uses anchor IDs to find the section
  */
@@ -224,6 +503,15 @@ function extractWhereToFindFromHTML(html: string): string | null {
 }
 
 /**
+ * Remove HTML comments from text
+ */
+function removeHTMLComments(text: string): string {
+  if (!text) return '';
+  // Remove HTML comments like <!-- comment -->
+  return text.replace(/<!--[\s\S]*?-->/g, '').trim();
+}
+
+/**
  * Extract data from wiki text content
  * Based on actual BG3 wiki structure
  */
@@ -231,21 +519,33 @@ function parseWikiContent(content: string, title: string): WikiItem {
   const item: WikiItem = { name: title };
   
   // Try to extract rarity (format: |rarity = Common or |rarity=Common)
-  const rarityMatch = content.match(/\|\s*rarity\s*=\s*([^\n|]+)/i);
+  const rarityMatch = content.match(/\|\s*rarity\s*=\s*([^\n|}]+)/i);
   if (rarityMatch) {
-    item.rarity = rarityMatch[1].trim();
+    // Remove HTML comments, template braces, and clean the rarity value
+    let rarity = removeHTMLComments(rarityMatch[1].trim());
+    // Remove any trailing template closing braces
+    rarity = rarity.replace(/}}+/g, '').trim();
+    item.rarity = rarity;
   }
   
   // Try to extract UUID (format: |uuid = c03b08dc-9e1f-46fa-b67f-7136c1ea5fe5)
-  const uuidMatch = content.match(/\|\s*uuid\s*=\s*([^\n|]+)/i);
+  const uuidMatch = content.match(/\|\s*uuid\s*=\s*([^\n|}]+)/i);
   if (uuidMatch) {
-    item.uuid = uuidMatch[1].trim();
+    // Remove HTML comments, template braces, and clean the UUID value
+    let uuid = removeHTMLComments(uuidMatch[1].trim());
+    // Remove any trailing template closing braces
+    uuid = uuid.replace(/}}+/g, '').trim();
+    item.uuid = uuid;
   }
   
   // Try to extract description (format: |description = ...)
-  const descMatch = content.match(/\|\s*description\s*=\s*([^\n|]+)/i);
+  const descMatch = content.match(/\|\s*description\s*=\s*([^\n|}]+)/i);
   if (descMatch) {
-    item.description = descMatch[1].trim().replace(/<[^>]+>/g, '');
+    // Remove HTML comments, template braces, and HTML tags from description
+    let description = removeHTMLComments(descMatch[1].trim());
+    // Remove any trailing template closing braces
+    description = description.replace(/}}+/g, '').trim();
+    item.description = description.replace(/<[^>]+>/g, '').trim();
   }
   
   // Helper function to extract field value from wiki template
@@ -337,6 +637,9 @@ function parseWikiContent(content: string, title: string): WikiItem {
     if (!text) return '';
     
     let cleaned = text.trim();
+    
+    // Remove HTML comments first
+    cleaned = removeHTMLComments(cleaned);
     
     // Remove HTML tags
     cleaned = cleaned.replace(/<[^>]+>/g, '');
@@ -538,20 +841,50 @@ export async function searchItems(query: string): Promise<WikiItem[]> {
         try {
           const encodedTitle = encodeURIComponent(page.title);
           const parseUrl = `${API_BASE}?action=parse&page=${encodedTitle}&prop=text&format=json&formatversion=2&origin=*`;
+          console.log(`[Item Parse] ${page.title} - Fetching HTML from:`, parseUrl);
           const parseResponse = await fetch(parseUrl);
+          console.log(`[Item Parse] ${page.title} - Response status:`, parseResponse.status, parseResponse.ok);
           
           if (parseResponse.ok) {
             const parseData: ParseResponse = await parseResponse.json();
             const html = parseData.parse?.text?.["*"] || '';
+            console.log(`[Item Parse] ${page.title} - HTML length:`, html.length);
             
             // Parse the item with both raw content and HTML
             const item = parseWikiContent(content, page.title);
+            console.log(`[Item Parse] ${page.title} - Item parsed, location from raw:`, item.where_to_find);
             
             // Extract "where to find" from HTML if available
             if (html) {
               const whereToFind = extractWhereToFindFromHTML(html);
+              console.log(`[Item Parse] ${page.title} - Extracted location from HTML:`, whereToFind);
               if (whereToFind) {
                 item.where_to_find = whereToFind;
+                // Determine Act from location
+                const act = await determineActFromLocation(whereToFind);
+                console.log(`[Item Parse] ${page.title} - Determined Act from HTML location:`, act);
+                if (act) {
+                  item.act = act;
+                }
+              } else {
+                console.log(`[Item Parse] ${page.title} - No location extracted from HTML, using raw location`);
+                // If HTML extraction failed, use raw location and determine Act
+                if (item.where_to_find) {
+                  const act = await determineActFromLocation(item.where_to_find);
+                  console.log(`[Item Parse] ${page.title} - Determined Act from raw location (HTML path):`, act);
+                  if (act) {
+                    item.act = act;
+                  }
+                }
+              }
+            } else {
+              // No HTML, use raw location and determine Act
+              if (item.where_to_find) {
+                const act = await determineActFromLocation(item.where_to_find);
+                console.log(`[Item Parse] ${page.title} - Determined Act from raw location (no HTML):`, act);
+                if (act) {
+                  item.act = act;
+                }
               }
             }
             
@@ -562,7 +895,17 @@ export async function searchItems(query: string): Promise<WikiItem[]> {
         }
         
         // Fallback to original parsing if HTML parse fails
-        return parseWikiContent(content, page.title);
+        const item = parseWikiContent(content, page.title);
+        console.log(`[Item Parse] ${page.title} - Fallback parsing, location from raw content:`, item.where_to_find);
+        // Try to determine Act from location if available
+        if (item.where_to_find) {
+          const act = await determineActFromLocation(item.where_to_find);
+          console.log(`[Item Parse] ${page.title} - Determined Act from fallback:`, act);
+          if (act) {
+            item.act = act;
+          }
+        }
+        return item;
       })
     );
     
@@ -630,13 +973,32 @@ export async function getItemByName(name: string): Promise<WikiItem | null> {
             // Extract "where to find" from HTML if available
             if (html) {
               const whereToFind = extractWhereToFindFromHTML(html);
+              console.log(`[getItemByName] ${name} - Extracted location from HTML:`, whereToFind);
               if (whereToFind) {
                 item.where_to_find = whereToFind;
+                // Determine Act from location
+                const act = await determineActFromLocation(whereToFind);
+                console.log(`[getItemByName] ${name} - Determined Act:`, act);
+                if (act) {
+                  item.act = act;
+                }
+              } else {
+                console.log(`[getItemByName] ${name} - No location extracted from HTML`);
               }
             }
           }
         } catch (parseError) {
           console.warn(`Failed to parse HTML for ${name}:`, parseError);
+        }
+        
+        // Also try to determine Act from location if we have it
+        if (item.where_to_find && !item.act) {
+          console.log(`[getItemByName] ${name} - Trying Act detection from raw location:`, item.where_to_find);
+          const act = await determineActFromLocation(item.where_to_find);
+          console.log(`[getItemByName] ${name} - Determined Act from raw location:`, act);
+          if (act) {
+            item.act = act;
+          }
         }
         
         return item;

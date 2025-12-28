@@ -6,6 +6,7 @@ export interface Item {
   rarity?: string;
   uuid?: string;
   description?: string;
+  act?: number; // Act 1, 2, or 3
 }
 
 export interface Build {

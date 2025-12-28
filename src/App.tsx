@@ -1,6 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Item, Build } from './types';
 import { loadBuilds, saveBuilds } from './utils/storage';
+import { determineActFromLocation } from './services/bg3WikiApi';
 import { AddItemForm } from './components/AddItemForm';
 import { ItemChecklist } from './components/ItemChecklist';
 import { BuildTabs } from './components/BuildTabs';
@@ -9,6 +10,7 @@ import './App.css';
 function App() {
   const [builds, setBuilds] = useState<Build[]>([]);
   const [activeBuildId, setActiveBuildId] = useState<string>('');
+  const hasProcessedActs = useRef(false);
 
   useEffect(() => {
     const loadedBuilds = loadBuilds();
@@ -17,6 +19,55 @@ function App() {
       setActiveBuildId(loadedBuilds[0].id);
     }
   }, []);
+
+  // Retroactively determine Act for existing items that don't have it
+  // This runs once after builds are initially loaded
+  useEffect(() => {
+    if (builds.length === 0 || hasProcessedActs.current) return;
+
+    // Check if any items need Act determination
+    const itemsNeedingAct = builds.some(build =>
+      build.items.some(item => 
+        item.location && item.location !== 'Location not found' && !item.act
+      )
+    );
+
+    if (!itemsNeedingAct) {
+      hasProcessedActs.current = true;
+      return;
+    }
+
+    // Process items that need Act determination
+    const processItems = async () => {
+      hasProcessedActs.current = true;
+      const processedBuilds = await Promise.all(
+        builds.map(async (build) => {
+          const processedItems = await Promise.all(
+            build.items.map(async (item) => {
+              // If item already has an Act, keep it
+              if (item.act || !item.location || item.location === 'Location not found') {
+                return item;
+              }
+
+              // Determine Act from location
+              console.log(`[Retroactive Act] Processing ${item.name} with location: ${item.location}`);
+              const act = await determineActFromLocation(item.location);
+              if (act) {
+                console.log(`[Retroactive Act] ${item.name} -> Act ${act}`);
+                return { ...item, act };
+              }
+              return item;
+            })
+          );
+          return { ...build, items: processedItems };
+        })
+      );
+      setBuilds(processedBuilds);
+    };
+
+    processItems();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [builds.length]); // Only run when builds are first loaded
 
   useEffect(() => {
     if (builds.length > 0) {

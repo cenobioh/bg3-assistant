@@ -343,6 +343,29 @@ body {
   gap: 1.5rem;
 }
 
+.checklist-acts {
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+}
+
+.act-section {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.act-section-header {
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  padding: 0.75rem 1rem;
+  background: var(--bg-tertiary);
+  border-radius: 8px;
+  border-left: 4px solid var(--accent);
+  margin: 0;
+}
+
 .checklist-header {
   display: flex;
   justify-content: space-between;
