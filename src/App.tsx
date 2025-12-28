@@ -43,7 +43,6 @@ function App() {
       </header>
       <main className="app-main">
         <section className="add-section">
-          <h2>Add New Item</h2>
           <AddItemForm onAdd={handleAddItem} />
         </section>
         <section className="checklist-section">
