@@ -6,6 +6,15 @@ interface AddItemFormProps {
   onAdd: (item: Omit<Item, 'id' | 'collected'>) => void;
 }
 
+/**
+ * Normalize rarity string to CSS class name
+ */
+function normalizeRarityClass(rarity: string): string {
+  return rarity.toLowerCase()
+    .replace(/\s+/g, '-')
+    .replace(/[^a-z0-9-]/g, '');
+}
+
 export function AddItemForm({ onAdd }: AddItemFormProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<WikiItem[]>([]);
@@ -57,6 +66,21 @@ export function AddItemForm({ onAdd }: AddItemFormProps) {
 
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  // Handle CTRL+F (or CMD+F on Mac) to focus search
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      // Check for Ctrl+F (Windows/Linux) or Cmd+F (Mac)
+      if ((event.ctrlKey || event.metaKey) && event.key === 'f') {
+        event.preventDefault();
+        inputRef.current?.focus();
+        inputRef.current?.select();
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
   }, []);
 
   const handleSelectItem = async (item: WikiItem, autoAdd: boolean = false) => {
@@ -193,6 +217,12 @@ export function AddItemForm({ onAdd }: AddItemFormProps) {
       <div className="form-group">
         <label htmlFor="item-name">Item Name</label>
         <div className="search-container" ref={dropdownRef}>
+          <div className="search-icon" aria-hidden="true">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="11" cy="11" r="8"></circle>
+              <path d="m21 21-4.35-4.35"></path>
+            </svg>
+          </div>
           <input
             ref={inputRef}
             id="item-name"
@@ -206,7 +236,12 @@ export function AddItemForm({ onAdd }: AddItemFormProps) {
             placeholder="Search for an item..."
             required
             autoComplete="off"
+            aria-label="Search for items to add to checklist"
+            aria-describedby="search-description"
           />
+          <span id="search-description" className="sr-only">
+            Type to search for items. Use arrow keys to navigate results and Enter to select.
+          </span>
           {isSearching && (
             <div className="search-loading">Searching...</div>
           )}
@@ -222,17 +257,25 @@ export function AddItemForm({ onAdd }: AddItemFormProps) {
                   enter manually
                 </button>
               </div>
-              <ul className="search-results">
+              <ul className="search-results" role="listbox" aria-label="Search results">
                 {searchResults.map((item, index) => (
                   <li
                     key={index}
                     className={`search-result-item ${index === highlightedIndex ? 'highlighted' : ''}`}
                     onClick={() => handleSelectItem(item)}
                     onMouseEnter={() => setHighlightedIndex(index)}
+                    role="option"
+                    aria-selected={index === highlightedIndex}
+                    aria-label={`${item.name}${item.rarity ? `, ${item.rarity} rarity` : ''}`}
                   >
                     <div className="result-name">{item.name}</div>
                     {item.rarity && (
-                      <div className="result-rarity">{item.rarity}</div>
+                      <div 
+                        className={`result-rarity rarity-${normalizeRarityClass(item.rarity)}`}
+                        aria-label={`Rarity: ${item.rarity}`}
+                      >
+                        {item.rarity}
+                      </div>
                     )}
                   </li>
                 ))}
@@ -242,9 +285,14 @@ export function AddItemForm({ onAdd }: AddItemFormProps) {
         </div>
       </div>
       {selectedItem && (
-        <div className="item-preview">
+        <div className="item-preview" role="region" aria-label="Selected item preview">
           {selectedItem.rarity && (
-            <span className="item-badge rarity">{selectedItem.rarity}</span>
+            <span 
+              className={`item-badge rarity rarity-${normalizeRarityClass(selectedItem.rarity)}`}
+              aria-label={`Rarity: ${selectedItem.rarity}`}
+            >
+              {selectedItem.rarity}
+            </span>
           )}
           {selectedItem.description && (
             <p className="item-description">{selectedItem.description}</p>

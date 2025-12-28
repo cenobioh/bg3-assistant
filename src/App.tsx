@@ -11,10 +11,15 @@ function App() {
   const [builds, setBuilds] = useState<Build[]>([]);
   const [activeBuildId, setActiveBuildId] = useState<string>('');
   const hasProcessedActs = useRef(false);
+  
+  // Undo/Redo history - using ref to avoid dependency issues
+  const historyRef = useRef<{ history: Build[][]; index: number }>({ history: [], index: -1 });
 
   useEffect(() => {
     const loadedBuilds = loadBuilds();
     setBuilds(loadedBuilds);
+    // Initialize history with initial state
+    historyRef.current = { history: [loadedBuilds], index: 0 };
     if (loadedBuilds.length > 0 && !activeBuildId) {
       setActiveBuildId(loadedBuilds[0].id);
     }
@@ -78,6 +83,72 @@ function App() {
   const activeBuild = builds.find(b => b.id === activeBuildId);
   const items = activeBuild?.items || [];
 
+  // Helper function to save state to history before making changes
+  const saveToHistory = (newBuilds: Build[]) => {
+    const newHistory = historyRef.current.history.slice(0, historyRef.current.index + 1);
+    newHistory.push(newBuilds);
+    // Limit history to last 50 actions
+    if (newHistory.length > 50) {
+      newHistory.shift();
+    } else {
+      historyRef.current.index = newHistory.length - 1;
+    }
+    historyRef.current = { history: newHistory, index: newHistory.length - 1 };
+  };
+
+  const handleUndo = () => {
+    if (historyRef.current.index > 0) {
+      const newIndex = historyRef.current.index - 1;
+      const previousBuilds = historyRef.current.history[newIndex];
+      setBuilds(previousBuilds);
+      historyRef.current.index = newIndex;
+      
+      // Update active build ID if needed
+      if (previousBuilds.length > 0) {
+        const prevActiveBuild = previousBuilds.find(b => b.id === activeBuildId);
+        if (!prevActiveBuild && previousBuilds[0]) {
+          setActiveBuildId(previousBuilds[0].id);
+        }
+      }
+    }
+  };
+
+  const handleRedo = () => {
+    if (historyRef.current.index < historyRef.current.history.length - 1) {
+      const newIndex = historyRef.current.index + 1;
+      const nextBuilds = historyRef.current.history[newIndex];
+      setBuilds(nextBuilds);
+      historyRef.current.index = newIndex;
+      
+      // Update active build ID if needed
+      if (nextBuilds.length > 0) {
+        const nextActiveBuild = nextBuilds.find(b => b.id === activeBuildId);
+        if (!nextActiveBuild && nextBuilds[0]) {
+          setActiveBuildId(nextBuilds[0].id);
+        }
+      }
+    }
+  };
+
+  // Handle CTRL+Z (undo) and CTRL+SHIFT+Z or CTRL+Y (redo)
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      // Check for Ctrl+Z (Windows/Linux) or Cmd+Z (Mac) for undo
+      if ((event.ctrlKey || event.metaKey) && event.key === 'z' && !event.shiftKey) {
+        event.preventDefault();
+        handleUndo();
+      }
+      // Check for Ctrl+Shift+Z or Ctrl+Y (Windows/Linux) or Cmd+Shift+Z (Mac) for redo
+      if ((event.ctrlKey || event.metaKey) && (event.key === 'y' || (event.key === 'z' && event.shiftKey))) {
+        event.preventDefault();
+        handleRedo();
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, []); // Empty deps - we use refs for history
+
   const handleAddItem = (itemData: Omit<Item, 'id' | 'collected'>) => {
     if (!activeBuild) return;
     
@@ -87,15 +158,17 @@ function App() {
       collected: false,
     };
     
-    setBuilds(builds.map(build =>
+    const newBuilds = builds.map(build =>
       build.id === activeBuildId
         ? { ...build, items: [...build.items, newItem] }
         : build
-    ));
+    );
+    saveToHistory(newBuilds);
+    setBuilds(newBuilds);
   };
 
   const handleToggleItem = (id: string) => {
-    setBuilds(builds.map(build =>
+    const newBuilds = builds.map(build =>
       build.id === activeBuildId
         ? {
             ...build,
@@ -104,15 +177,34 @@ function App() {
             ),
           }
         : build
-    ));
+    );
+    saveToHistory(newBuilds);
+    setBuilds(newBuilds);
   };
 
   const handleRemoveItem = (id: string) => {
-    setBuilds(builds.map(build =>
+    const newBuilds = builds.map(build =>
       build.id === activeBuildId
         ? { ...build, items: build.items.filter(item => item.id !== id) }
         : build
-    ));
+    );
+    saveToHistory(newBuilds);
+    setBuilds(newBuilds);
+  };
+
+  const handleMarkActComplete = (act: number | undefined) => {
+    const newBuilds = builds.map(build =>
+      build.id === activeBuildId
+        ? {
+            ...build,
+            items: build.items.map(item =>
+              item.act === act ? { ...item, collected: true } : item
+            ),
+          }
+        : build
+    );
+    saveToHistory(newBuilds);
+    setBuilds(newBuilds);
   };
 
   const handleSelectBuild = (buildId: string) => {
@@ -126,20 +218,25 @@ function App() {
       items: [],
       createdAt: Date.now(),
     };
-    setBuilds([...builds, newBuild]);
+    const newBuilds = [...builds, newBuild];
+    saveToHistory(newBuilds);
+    setBuilds(newBuilds);
     setActiveBuildId(newBuild.id);
   };
 
   const handleRenameBuild = (buildId: string, newName: string) => {
-    setBuilds(builds.map(build =>
+    const newBuilds = builds.map(build =>
       build.id === buildId ? { ...build, name: newName } : build
-    ));
+    );
+    saveToHistory(newBuilds);
+    setBuilds(newBuilds);
   };
 
   const handleDeleteBuild = (buildId: string) => {
     if (builds.length <= 1) return; // Don't delete the last build
     
     const newBuilds = builds.filter(build => build.id !== buildId);
+    saveToHistory(newBuilds);
     setBuilds(newBuilds);
     
     // If we deleted the active build, switch to the first one
@@ -153,6 +250,19 @@ function App() {
       <header className="app-header">
         <h1>⚔️ BG3 Item Collection Assistant</h1>
         <p>Track your Baldur's Gate 3 item collection progress</p>
+        <div className="shortcuts-info">
+          <span className="shortcut-item">
+            <kbd>{typeof navigator !== 'undefined' && (navigator.platform.toLowerCase().includes('mac') || navigator.userAgent.toLowerCase().includes('mac')) ? '⌘' : 'Ctrl'}</kbd> + <kbd>F</kbd> Focus search
+          </span>
+          <span className="shortcut-separator">•</span>
+          <span className="shortcut-item">
+            <kbd>{typeof navigator !== 'undefined' && (navigator.platform.toLowerCase().includes('mac') || navigator.userAgent.toLowerCase().includes('mac')) ? '⌘' : 'Ctrl'}</kbd> + <kbd>Z</kbd> Undo
+          </span>
+          <span className="shortcut-separator">•</span>
+          <span className="shortcut-item">
+            <kbd>{typeof navigator !== 'undefined' && (navigator.platform.toLowerCase().includes('mac') || navigator.userAgent.toLowerCase().includes('mac')) ? '⌘' : 'Ctrl'}</kbd> + <kbd>⇧</kbd> + <kbd>Z</kbd> Redo
+          </span>
+        </div>
       </header>
       {builds.length > 0 && (
         <BuildTabs
@@ -173,6 +283,7 @@ function App() {
             items={items}
             onToggle={handleToggleItem}
             onRemove={handleRemoveItem}
+            onMarkActComplete={handleMarkActComplete}
           />
         </section>
       </main>
