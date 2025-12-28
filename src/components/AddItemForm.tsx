@@ -14,8 +14,10 @@ export function AddItemForm({ onAdd }: AddItemFormProps) {
   const [isSearching, setIsSearching] = useState(false);
   const [showDropdown, setShowDropdown] = useState(false);
   const [manualMode, setManualMode] = useState(false);
+  const [highlightedIndex, setHighlightedIndex] = useState(-1);
   const searchTimeoutRef = useRef<ReturnType<typeof setTimeout>>();
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   // Debounced search
   useEffect(() => {
@@ -26,6 +28,7 @@ export function AddItemForm({ onAdd }: AddItemFormProps) {
     if (!searchQuery.trim() || selectedItem || manualMode) {
       setSearchResults([]);
       setIsSearching(false);
+      setHighlightedIndex(-1);
       return;
     }
 
@@ -35,6 +38,7 @@ export function AddItemForm({ onAdd }: AddItemFormProps) {
       setSearchResults(results);
       setIsSearching(false);
       setShowDropdown(results.length > 0);
+      setHighlightedIndex(-1); // Reset highlight when results change
     }, 300);
 
     return () => {
@@ -56,12 +60,30 @@ export function AddItemForm({ onAdd }: AddItemFormProps) {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  const handleSelectItem = async (item: WikiItem) => {
+  const handleSelectItem = async (item: WikiItem, autoAdd: boolean = false) => {
     setSelectedItem(item);
     setSearchQuery(item.name);
     setLocation(item.where_to_find || '');
     setShowDropdown(false);
     setManualMode(false);
+    setHighlightedIndex(-1);
+    
+    // If autoAdd is true, automatically add the item to the list
+    if (autoAdd) {
+      const itemData: Omit<Item, 'id' | 'collected'> = {
+        name: item.name,
+        location: item.where_to_find || 'Location not found',
+        rarity: item.rarity,
+        uuid: item.uuid,
+        description: item.description,
+      };
+      onAdd(itemData);
+      // Reset form after adding
+      setSearchQuery('');
+      setLocation('');
+      setSelectedItem(null);
+      setSearchResults([]);
+    }
   };
 
   const handleSearchChange = (value: string) => {
@@ -72,6 +94,49 @@ export function AddItemForm({ onAdd }: AddItemFormProps) {
     }
     if (manualMode) {
       setManualMode(false);
+    }
+    setHighlightedIndex(-1); // Reset highlight when typing
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (!showDropdown || searchResults.length === 0) {
+      // If dropdown is not shown, allow default behavior
+      if (e.key === 'Enter') {
+        // Enter will submit the form, which is fine
+        return;
+      }
+      return;
+    }
+
+    switch (e.key) {
+      case 'ArrowDown':
+        e.preventDefault();
+        setHighlightedIndex((prev) => {
+          const next = prev < searchResults.length - 1 ? prev + 1 : 0;
+          return next;
+        });
+        break;
+      case 'ArrowUp':
+        e.preventDefault();
+        setHighlightedIndex((prev) => {
+          const next = prev > 0 ? prev - 1 : searchResults.length - 1;
+          return next;
+        });
+        break;
+      case 'Enter':
+        e.preventDefault();
+        if (highlightedIndex >= 0 && highlightedIndex < searchResults.length) {
+          handleSelectItem(searchResults[highlightedIndex], true); // Auto-add on Enter
+        } else if (searchResults.length > 0) {
+          // If nothing is highlighted, select and add the first item
+          handleSelectItem(searchResults[0], true);
+        }
+        break;
+      case 'Escape':
+        e.preventDefault();
+        setShowDropdown(false);
+        setHighlightedIndex(-1);
+        break;
     }
   };
 
@@ -132,10 +197,12 @@ export function AddItemForm({ onAdd }: AddItemFormProps) {
         <label htmlFor="item-name">Item Name</label>
         <div className="search-container" ref={dropdownRef}>
           <input
+            ref={inputRef}
             id="item-name"
             type="text"
             value={searchQuery}
             onChange={(e) => handleSearchChange(e.target.value)}
+            onKeyDown={handleKeyDown}
             onFocus={() => {
               if (searchResults.length > 0) setShowDropdown(true);
             }}
@@ -162,8 +229,9 @@ export function AddItemForm({ onAdd }: AddItemFormProps) {
                 {searchResults.map((item, index) => (
                   <li
                     key={index}
-                    className="search-result-item"
+                    className={`search-result-item ${index === highlightedIndex ? 'highlighted' : ''}`}
                     onClick={() => handleSelectItem(item)}
+                    onMouseEnter={() => setHighlightedIndex(index)}
                   >
                     <div className="result-name">{item.name}</div>
                     {item.rarity && (
