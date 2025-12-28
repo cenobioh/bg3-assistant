@@ -43,7 +43,12 @@ export function ItemChecklist({ items, onToggle, onRemove }: ItemChecklistProps)
               />
               <span className="checkmark"></span>
               <div className="item-info">
-                <span className="item-name">{item.name}</span>
+                <div className="item-name-row">
+                  <span className="item-name">{item.name}</span>
+                  {item.rarity && (
+                    <span className="item-badge rarity">{item.rarity}</span>
+                  )}
+                </div>
                 <span className="item-location">{item.location}</span>
               </div>
             </label>

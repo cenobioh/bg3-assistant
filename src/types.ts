@@ -3,5 +3,8 @@ export interface Item {
   name: string;
   location: string;
   collected: boolean;
+  rarity?: string;
+  uuid?: string;
+  description?: string;
 }
 
