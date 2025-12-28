@@ -50,6 +50,57 @@ Preview the production build:
 npm run preview
 ```
 
+## Deploying to GitHub Pages
+
+This project is configured for automatic deployment to GitHub Pages using GitHub Actions.
+
+### Setup Instructions
+
+1. **Update the base path** in `vite.config.ts`:
+   - If your repository is named `bg3-assistant`, the base path should be `/bg3-assistant/`
+   - If your repository has a different name, update the `basePath` variable to match: `/your-repo-name/`
+   - For custom domain deployment, set base to `/`
+
+2. **Enable GitHub Pages**:
+   - Go to your repository Settings → Pages
+   - Under "Source", select "GitHub Actions"
+   - The workflow will automatically deploy when you push to the `main` branch
+
+3. **Push your code**:
+   ```bash
+   git add .
+   git commit -m "Setup GitHub Pages deployment"
+   git push origin main
+   ```
+
+4. **Monitor deployment**:
+   - Go to the "Actions" tab in your repository
+   - You'll see the deployment workflow running
+   - Once complete, your site will be available at `https://yourusername.github.io/your-repo-name/`
+
+### Manual Deployment (Alternative)
+
+If you prefer to deploy manually:
+
+1. Build the project:
+   ```bash
+   npm run build
+   ```
+
+2. Push the `dist` folder to the `gh-pages` branch:
+   ```bash
+   git subtree push --prefix dist origin gh-pages
+   ```
+
+   Or use a tool like `gh-pages`:
+   ```bash
+   npm install --save-dev gh-pages
+   npm run build
+   npx gh-pages -d dist
+   ```
+
+3. Configure GitHub Pages to serve from the `gh-pages` branch in repository settings.
+
 ## Usage
 
 1. **Add Items**: 
