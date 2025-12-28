@@ -18,6 +18,16 @@ export function ItemChecklist({ items, onToggle, onRemove }: ItemChecklistProps)
   const collectedCount = items.filter(item => item.collected).length;
   const totalCount = items.length;
 
+  // Sort items: non-collected first, collected at the bottom
+  const sortedItems = [...items].sort((a, b) => {
+    // If both are collected or both are not collected, maintain original order
+    if (a.collected === b.collected) {
+      return 0;
+    }
+    // Non-collected items come first (return -1), collected items come last (return 1)
+    return a.collected ? 1 : -1;
+  });
+
   return (
     <div className="checklist-container">
       <div className="checklist-header">
@@ -33,7 +43,7 @@ export function ItemChecklist({ items, onToggle, onRemove }: ItemChecklistProps)
         />
       </div>
       <ul className="item-list">
-        {items.map((item) => (
+        {sortedItems.map((item) => (
           <li key={item.id} className={`item-row ${item.collected ? 'collected' : ''}`}>
             <label className="item-checkbox">
               <input

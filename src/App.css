@@ -193,7 +193,8 @@ body {
   background: var(--bg-tertiary);
   border-radius: 8px;
   border: 2px solid var(--border);
-  transition: all 0.2s;
+  transition: all 0.3s ease-in-out;
+  position: relative;
 }
 
 .item-row:hover {

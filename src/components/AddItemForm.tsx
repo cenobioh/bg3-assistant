@@ -10,7 +10,6 @@ export function AddItemForm({ onAdd }: AddItemFormProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<WikiItem[]>([]);
   const [selectedItem, setSelectedItem] = useState<WikiItem | null>(null);
-  const [location, setLocation] = useState('');
   const [isSearching, setIsSearching] = useState(false);
   const [showDropdown, setShowDropdown] = useState(false);
   const [manualMode, setManualMode] = useState(false);
@@ -63,7 +62,6 @@ export function AddItemForm({ onAdd }: AddItemFormProps) {
   const handleSelectItem = async (item: WikiItem, autoAdd: boolean = false) => {
     setSelectedItem(item);
     setSearchQuery(item.name);
-    setLocation(item.where_to_find || '');
     setShowDropdown(false);
     setManualMode(false);
     setHighlightedIndex(-1);
@@ -80,7 +78,6 @@ export function AddItemForm({ onAdd }: AddItemFormProps) {
       onAdd(itemData);
       // Reset form after adding
       setSearchQuery('');
-      setLocation('');
       setSelectedItem(null);
       setSearchResults([]);
     }
@@ -90,7 +87,6 @@ export function AddItemForm({ onAdd }: AddItemFormProps) {
     setSearchQuery(value);
     if (selectedItem) {
       setSelectedItem(null);
-      setLocation('');
     }
     if (manualMode) {
       setManualMode(false);
@@ -152,10 +148,9 @@ export function AddItemForm({ onAdd }: AddItemFormProps) {
     if (!searchQuery.trim()) return;
 
     let itemName = searchQuery.trim();
-    let itemLocation = location.trim();
     let itemData: Omit<Item, 'id' | 'collected'> = {
       name: itemName,
-      location: itemLocation || 'Location not found',
+      location: 'Location not found',
     };
 
     // If we have a selected item, use its data
@@ -167,7 +162,7 @@ export function AddItemForm({ onAdd }: AddItemFormProps) {
         uuid: selectedItem.uuid,
         description: selectedItem.description,
       };
-    } else if (!manualMode && !location.trim()) {
+    } else if (!manualMode) {
       // Try to fetch the item if not in manual mode
       const wikiItem = await getItemByName(itemName);
       if (wikiItem) {
@@ -184,7 +179,6 @@ export function AddItemForm({ onAdd }: AddItemFormProps) {
     if (itemData.name) {
       onAdd(itemData);
       setSearchQuery('');
-      setLocation('');
       setSelectedItem(null);
       setManualMode(false);
       setSearchResults([]);
@@ -243,27 +237,6 @@ export function AddItemForm({ onAdd }: AddItemFormProps) {
             </div>
           )}
         </div>
-      </div>
-      <div className="form-group">
-        <label htmlFor="item-location">Location</label>
-        <input
-          id="item-location"
-          type="text"
-          value={location}
-          onChange={(e) => setLocation(e.target.value)}
-          placeholder={
-            selectedItem
-              ? selectedItem.where_to_find || 'Location not found in wiki'
-              : 'Location will be auto-filled from wiki'
-          }
-          required
-          disabled={!!selectedItem?.where_to_find && !manualMode}
-        />
-        {selectedItem && !selectedItem.where_to_find && (
-          <small className="form-hint">
-            Location not found in wiki. Please enter manually.
-          </small>
-        )}
       </div>
       {selectedItem && (
         <div className="item-preview">
