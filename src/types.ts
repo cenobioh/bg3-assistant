@@ -8,3 +8,10 @@ export interface Item {
   description?: string;
 }
 
+export interface Build {
+  id: string;
+  name: string;
+  items: Item[];
+  createdAt: number;
+}
+

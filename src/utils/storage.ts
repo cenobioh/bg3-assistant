@@ -1,6 +1,7 @@
-import { Item } from '../types';
+import { Item, Build } from '../types';
 
 const STORAGE_KEY = 'bg3-item-checklist';
+const BUILDS_STORAGE_KEY = 'bg3-builds';
 // Cookie expiration: 1 year from now
 const COOKIE_MAX_AGE = 365 * 24 * 60 * 60; // seconds
 
@@ -79,7 +80,121 @@ export const loadItems = (): Item[] => {
 };
 
 /**
+ * Load builds from storage
+ */
+export const loadBuilds = (): Build[] => {
+  try {
+    // Try to load from cookie first
+    const cookieData = getCookie(BUILDS_STORAGE_KEY);
+    if (cookieData) {
+      const parsed = JSON.parse(cookieData);
+      if (Array.isArray(parsed)) {
+        return parsed;
+      }
+    }
+    
+    // Fallback to localStorage
+    try {
+      const stored = localStorage.getItem(BUILDS_STORAGE_KEY);
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed)) {
+          // Migrate to cookie
+          saveBuilds(parsed);
+          return parsed;
+        }
+      }
+    } catch {
+      // localStorage not available or failed
+    }
+    
+    // If no builds exist, create a default one for migration
+    const oldItems = loadItems();
+    if (oldItems.length > 0) {
+      const defaultBuild: Build = {
+        id: generateId(),
+        name: 'My First Run',
+        items: oldItems,
+        createdAt: Date.now(),
+      };
+      const builds = [defaultBuild];
+      saveBuilds(builds);
+      return builds;
+    }
+    
+    // Create a default build if none exist
+    const defaultBuild: Build = {
+      id: generateId(),
+      name: 'My First Run',
+      items: [],
+      createdAt: Date.now(),
+    };
+    const builds = [defaultBuild];
+    saveBuilds(builds);
+    return builds;
+  } catch (error) {
+    console.error('Failed to load builds:', error);
+    // Return default build on error
+    const defaultBuild: Build = {
+      id: generateId(),
+      name: 'My First Run',
+      items: [],
+      createdAt: Date.now(),
+    };
+    return [defaultBuild];
+  }
+};
+
+/**
+ * Generate a simple unique ID
+ */
+function generateId(): string {
+  return `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+}
+
+/**
+ * Save builds to storage
+ */
+export const saveBuilds = (builds: Build[]): void => {
+  try {
+    const jsonString = JSON.stringify(builds);
+    const dataSize = jsonString.length;
+    
+    // Cookies have a 4KB limit (4096 bytes)
+    if (dataSize > 4000) {
+      console.warn('Builds data exceeds cookie size limit. Using localStorage instead.');
+      try {
+        localStorage.setItem(BUILDS_STORAGE_KEY, jsonString);
+        setCookie(BUILDS_STORAGE_KEY, '', 0);
+        return;
+      } catch (localStorageError) {
+        console.error('Failed to save to localStorage:', localStorageError);
+      }
+    }
+    
+    // Save to cookie (primary storage)
+    setCookie(BUILDS_STORAGE_KEY, jsonString, COOKIE_MAX_AGE);
+    
+    // Also save to localStorage as backup
+    try {
+      localStorage.setItem(BUILDS_STORAGE_KEY, jsonString);
+    } catch {
+      // localStorage might not be available, that's okay
+    }
+  } catch (error) {
+    console.error('Failed to save builds:', error);
+    // Try localStorage as last resort
+    try {
+      localStorage.setItem(BUILDS_STORAGE_KEY, JSON.stringify(builds));
+    } catch {
+      // Both failed, but we tried
+    }
+  }
+};
+
+/**
  * Save items to cookies, with localStorage fallback for large datasets
+ * @deprecated Use saveBuilds instead. Kept for backward compatibility.
  */
 export const saveItems = (items: Item[]): void => {
   try {

@@ -58,6 +58,156 @@ body {
   font-size: 1.1rem;
 }
 
+/* Build Tabs */
+.build-tabs {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 2rem;
+  padding: 0.5rem;
+  background: var(--bg-secondary);
+  border-radius: 12px;
+  box-shadow: 0 4px 6px var(--shadow);
+  overflow-x: auto;
+}
+
+.build-tabs-list {
+  display: flex;
+  gap: 0.5rem;
+  flex: 1;
+  overflow-x: auto;
+}
+
+.build-tab {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem 1rem;
+  background: var(--bg-tertiary);
+  border: 2px solid var(--border);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s;
+  white-space: nowrap;
+  min-width: fit-content;
+}
+
+.build-tab:hover {
+  border-color: var(--border-hover);
+  background: var(--bg-primary);
+}
+
+.build-tab.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--text-primary);
+}
+
+.build-tab-name {
+  font-weight: 500;
+  user-select: none;
+  flex: 1;
+}
+
+.build-tab-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  margin-left: 0.5rem;
+}
+
+.build-tab-edit {
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  font-size: 1rem;
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.2s;
+  padding: 0;
+  line-height: 1;
+}
+
+.build-tab-edit:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--text-primary);
+  transform: scale(1.1);
+}
+
+.build-tab.active .build-tab-edit {
+  color: var(--text-primary);
+}
+
+.build-tab.active .build-tab-edit:hover {
+  background: rgba(0, 0, 0, 0.2);
+}
+
+.build-tab-edit-input {
+  background: var(--bg-primary);
+  border: 2px solid var(--accent);
+  border-radius: 4px;
+  padding: 0.25rem 0.5rem;
+  color: var(--text-primary);
+  font-size: 0.9rem;
+  min-width: 100px;
+  outline: none;
+}
+
+.build-tab-delete {
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  font-size: 1.2rem;
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.2s;
+  padding: 0;
+  line-height: 1;
+}
+
+.build-tab-delete:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--text-primary);
+  transform: scale(1.1);
+}
+
+.build-tab.active .build-tab-delete {
+  color: var(--text-primary);
+}
+
+.build-tab.active .build-tab-delete:hover {
+  background: rgba(0, 0, 0, 0.2);
+}
+
+.build-tab-add {
+  padding: 0.75rem 1rem;
+  background: var(--bg-tertiary);
+  border: 2px solid var(--border);
+  border-radius: 8px;
+  color: var(--text-primary);
+  font-size: 0.9rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+
+.build-tab-add:hover {
+  background: var(--accent);
+  border-color: var(--accent);
+  transform: translateY(-1px);
+}
+
 .app-main {
   display: flex;
   flex-direction: column;
