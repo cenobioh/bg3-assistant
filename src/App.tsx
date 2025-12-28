@@ -49,17 +49,21 @@ function App() {
         builds.map(async (build) => {
           const processedItems = await Promise.all(
             build.items.map(async (item) => {
-              // If item already has an Act, keep it
-              if (item.act || !item.location || item.location === 'Location not found') {
+              // Skip if no location
+              if (!item.location || item.location === 'Location not found') {
                 return item;
               }
 
-              // Determine Act from location
-              console.log(`[Retroactive Act] Processing ${item.name} with location: ${item.location}`);
+              // Re-check Act for items that might have been incorrectly assigned
+              // This helps update items when location mappings are improved
+              console.log(`[Retroactive Act] Processing ${item.name} with location: ${item.location}, current act: ${item.act}`);
               const act = await determineActFromLocation(item.location);
               if (act) {
-                console.log(`[Retroactive Act] ${item.name} -> Act ${act}`);
-                return { ...item, act };
+                // Only update if we got a different act, or if item had no act
+                if (!item.act || item.act !== act) {
+                  console.log(`[Retroactive Act] ${item.name} -> Act ${act} (was ${item.act || 'unknown'})`);
+                  return { ...item, act };
+                }
               }
               return item;
             })

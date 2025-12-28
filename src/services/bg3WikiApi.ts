@@ -269,6 +269,8 @@ const LOCATION_TO_ACT: { [key: string]: number } = {
   'Forge of the Nine': 3,
   'Wyrm\'s Rock Fortress': 3,
   'Highberry\'s Home': 3,
+  'Stormshore Armoury': 3,
+  'Stormshore Armory': 3,
 };
 
 /**
@@ -427,8 +429,11 @@ export async function determineActFromLocation(locationText: string | undefined)
   const lowerText = normalizedText.toLowerCase();
   console.log('[Act Detection] Searching full text for location matches:', lowerText);
   
-  // First, try exact location name matches
-  for (const [knownLocation, act] of Object.entries(LOCATION_TO_ACT)) {
+  // Sort locations by length (longest first) to prioritize more specific matches
+  const sortedLocations = Object.entries(LOCATION_TO_ACT).sort((a, b) => b[0].length - a[0].length);
+  
+  // First, try exact location name matches (prioritize longer matches)
+  for (const [knownLocation, act] of sortedLocations) {
     const lowerKnown = knownLocation.toLowerCase();
     // Direct match in text
     if (lowerText.includes(lowerKnown)) {
@@ -480,9 +485,15 @@ export async function determineActFromLocation(locationText: string | undefined)
     'wyrms rock fortress': 3,
     'highberry\'s home': 3,
     'highberrys home': 3,
+    'stormshore armoury': 3,
+    'stormshore armory': 3,
+    'stormshore': 3,
   };
   
-  for (const [keyword, act] of Object.entries(locationKeywords)) {
+  // Sort keywords by length (longest first) to prioritize more specific matches
+  const sortedKeywords = Object.entries(locationKeywords).sort((a, b) => b[0].length - a[0].length);
+  
+  for (const [keyword, act] of sortedKeywords) {
     // Try simple includes first
     if (lowerText.includes(keyword)) {
       console.log('[Act Detection] Found keyword match:', keyword, '-> Act', act);
@@ -503,6 +514,12 @@ export async function determineActFromLocation(locationText: string | undefined)
   // This handles cases where the location might be written differently
   if (lowerText.includes('cloister') && lowerText.includes('somber')) {
     console.log('[Act Detection] Found "cloister" and "somber" together -> Act 3');
+    return 3;
+  }
+  
+  // Special case: Check for "stormshore" and "armoury"/"armory" together
+  if (lowerText.includes('stormshore') && (lowerText.includes('armoury') || lowerText.includes('armory'))) {
+    console.log('[Act Detection] Found "stormshore" and "armoury"/"armory" together -> Act 3');
     return 3;
   }
   
