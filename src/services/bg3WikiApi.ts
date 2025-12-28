@@ -246,6 +246,8 @@ const LOCATION_TO_ACT: { [key: string]: number } = {
   'Temple of Shar': 2,
   'Grand Mausoleum': 2,
   'Ketheric Thorm': 2,
+  'Shadowfell': 2,
+  'Ruined Battlefield': 2,
   
   // Act 3 locations
   'Baldur\'s Gate': 3,
@@ -259,6 +261,12 @@ const LOCATION_TO_ACT: { [key: string]: number } = {
   'Sorcerous Sundries': 3,
   'Temple of Bhaal': 3,
   'High Hall': 3,
+  'Cloister of Somber Embrace': 3,
+  'Szarr Palace': 3,
+  'Murder Tribunal': 3,
+  'Forge of the Nine': 3,
+  'Wyrm\'s Rock Fortress': 3,
+  'Highberry\'s Home': 3,
 };
 
 /**
@@ -453,11 +461,21 @@ export async function determineActFromLocation(locationText: string | undefined)
     'mountain pass': 1,
     'shadow-cursed': 2,
     'shadow cursed': 2,
+    'shadowfell': 2,
+    'ruined battlefield': 2,
     'moonrise': 2,
     'baldur\'s gate': 3,
     'baldurs gate': 3,
     'lower city': 3,
     'upper city': 3,
+    'cloister of somber embrace': 3,
+    'szarr palace': 3,
+    'murder tribunal': 3,
+    'forge of the nine': 3,
+    'wyrm\'s rock fortress': 3,
+    'wyrms rock fortress': 3,
+    'highberry\'s home': 3,
+    'highberrys home': 3,
   };
   
   for (const [keyword, act] of Object.entries(locationKeywords)) {
