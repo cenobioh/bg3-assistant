@@ -262,6 +262,8 @@ const LOCATION_TO_ACT: { [key: string]: number } = {
   'Temple of Bhaal': 3,
   'High Hall': 3,
   'Cloister of Somber Embrace': 3,
+  'Cloister': 3,
+  'Somber Embrace': 3,
   'Szarr Palace': 3,
   'Murder Tribunal': 3,
   'Forge of the Nine': 3,
@@ -469,6 +471,8 @@ export async function determineActFromLocation(locationText: string | undefined)
     'lower city': 3,
     'upper city': 3,
     'cloister of somber embrace': 3,
+    'cloister': 3,
+    'somber embrace': 3,
     'szarr palace': 3,
     'murder tribunal': 3,
     'forge of the nine': 3,
@@ -479,10 +483,27 @@ export async function determineActFromLocation(locationText: string | undefined)
   };
   
   for (const [keyword, act] of Object.entries(locationKeywords)) {
+    // Try simple includes first
     if (lowerText.includes(keyword)) {
       console.log('[Act Detection] Found keyword match:', keyword, '-> Act', act);
       return act;
     }
+    // Also try word boundary matching for multi-word keywords
+    if (keyword.includes(' ')) {
+      const escapedKeyword = keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const keywordRegex = new RegExp(`\\b${escapedKeyword}\\b`, 'i');
+      if (keywordRegex.test(lowerText)) {
+        console.log('[Act Detection] Found keyword match (word boundary):', keyword, '-> Act', act);
+        return act;
+      }
+    }
+  }
+  
+  // Special case: Check for "cloister" and "somber" together (for Cloister of Somber Embrace)
+  // This handles cases where the location might be written differently
+  if (lowerText.includes('cloister') && lowerText.includes('somber')) {
+    console.log('[Act Detection] Found "cloister" and "somber" together -> Act 3');
+    return 3;
   }
   
   // If no match found, try to query wiki for location pages
