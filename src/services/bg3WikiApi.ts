@@ -34,6 +34,20 @@ interface PageContentResponse {
   };
 }
 
+interface ParseResponse {
+  parse?: {
+    title?: string;
+    pageid?: number;
+    text?: {
+      "*"?: string;
+    };
+  };
+  error?: {
+    code?: string;
+    info?: string;
+  };
+}
+
 const API_BASE = 'https://bg3.wiki/w/api.php';
 
 /**
@@ -45,8 +59,6 @@ function isEquippableItem(content: string): boolean {
   if (!content || content.trim().length === 0) {
     return false;
   }
-  
-  const contentLower = content.toLowerCase();
   
   // Check for item-related page templates (actual BG3 wiki format)
   // More flexible matching - check for any template starting with item/weapon/armor keywords
@@ -107,6 +119,108 @@ function isEquippableItem(content: string): boolean {
   // - (UUID or UID) AND item-related fields (rarity, damage, etc.)
   // This makes it more lenient to catch all item types
   return hasItemTemplate || hasItemCategory || ((hasUuid || hasUid) && hasItemFields);
+}
+
+/**
+ * Extract section content from rendered HTML by anchor ID
+ * Searches for <span> elements with id matching the anchor (e.g., id="Where_to_find")
+ * MediaWiki structure: <h2><span class="mw-headline" id="Where_to_find">Where to find</span></h2>
+ */
+function extractSectionFromHTML(html: string, anchorId: string): string | null {
+  if (!html) return null;
+  
+  // Create a temporary DOM parser (works in browser environment)
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(html, 'text/html');
+  
+  // Try different ID formats
+  const idVariations = [
+    anchorId.toLowerCase().replace(/\s+/g, '_'),
+    anchorId.replace(/\s+/g, '_'),
+    anchorId.toLowerCase(),
+    anchorId,
+    anchorId.replace(/\s+/g, '-'),
+    anchorId.toLowerCase().replace(/\s+/g, '-'),
+  ];
+  
+  let targetSpan: Element | null = null;
+  
+  for (const id of idVariations) {
+    targetSpan = doc.querySelector(`span[id="${id}"]`);
+    if (targetSpan) break;
+  }
+  
+  if (!targetSpan) {
+    return null;
+  }
+  
+  // Find the parent heading (h2, h3, etc.)
+  let heading = targetSpan.parentElement;
+  while (heading && !heading.tagName.match(/^H[1-6]$/)) {
+    heading = heading.parentElement;
+  }
+  
+  if (!heading) {
+    return null;
+  }
+  
+  // Collect content from the heading's next siblings until the next heading
+  const contentParts: string[] = [];
+  let current: Element | null = heading.nextElementSibling;
+  
+  while (current) {
+    // Stop if we hit another heading
+    if (current.tagName.match(/^H[1-6]$/)) {
+      break;
+    }
+    
+    // Get text content, excluding edit links and navigation
+    const text = current.textContent || '';
+    if (text.trim() && !text.match(/^\[edit\]$/i)) {
+      contentParts.push(text.trim());
+    }
+    
+    current = current.nextElementSibling;
+  }
+  
+  if (contentParts.length === 0) {
+    return null;
+  }
+  
+  // Join and clean up the content
+  return contentParts
+    .join(' ')
+    .replace(/\s+/g, ' ')
+    .replace(/\[edit\]/gi, '')
+    .trim();
+}
+
+/**
+ * Extract "where to find" information from rendered HTML
+ * Uses anchor IDs to find the section
+ */
+function extractWhereToFindFromHTML(html: string): string | null {
+  if (!html) return null;
+  
+  // Try different possible anchor IDs for "where to find" section
+  const possibleAnchors = [
+    'Where_to_find',
+    'Where_to_Find',
+    'where_to_find',
+    'Location',
+    'location',
+    'Locations',
+    'locations'
+  ];
+  
+  for (const anchor of possibleAnchors) {
+    const content = extractSectionFromHTML(html, anchor);
+    if (content && content.length > 10) { // Only return if we got meaningful content
+      return content;
+    }
+  }
+  
+  return null;
 }
 
 /**
@@ -218,6 +332,7 @@ function parseWikiContent(content: string, title: string): WikiItem {
   }
   
   // Helper function to clean wiki markup
+  // Preserves template calls like {{CharLink|Mizora}} as they provide helpful context
   const cleanWikiText = (text: string): string => {
     if (!text) return '';
     
@@ -227,36 +342,19 @@ function parseWikiContent(content: string, title: string): WikiItem {
     cleaned = cleaned.replace(/<[^>]+>/g, '');
     
     // Convert [[links]] to plain text (extract the link text)
-    cleaned = cleaned.replace(/\[\[([^\]]+)\]\]/g, (match, linkText) => {
+    cleaned = cleaned.replace(/\[\[([^\]]+)\]\]/g, (_match, linkText) => {
       // Handle piped links: [[Link Text|Display Text]] -> Display Text
       const parts = linkText.split('|');
       return parts[parts.length - 1]; // Return the display text or link text
     });
     
-    // Remove template calls - handle nested templates by tracking depth
-    let templateDepth = 0;
-    let result = '';
-    for (let i = 0; i < cleaned.length; i++) {
-      const twoChars = cleaned.substring(i, i + 2);
-      if (twoChars === '{{') {
-        templateDepth++;
-        i++; // Skip both characters
-        continue;
-      } else if (twoChars === '}}') {
-        templateDepth--;
-        i++; // Skip both characters
-        continue;
-      } else if (templateDepth === 0) {
-        result += cleaned[i];
-      }
-      // If templateDepth > 0, we're inside a template, so skip the character
-    }
-    cleaned = result;
+    // Keep template calls like {{CharLink|Mizora}} - they provide helpful context
+    // Just normalize whitespace around them
     
     // Replace newlines with spaces
     cleaned = cleaned.replace(/\n+/g, ' ');
     
-    // Normalize whitespace
+    // Normalize whitespace (but preserve templates)
     cleaned = cleaned.replace(/\s+/g, ' ');
     
     return cleaned.trim();
@@ -339,7 +437,7 @@ function parseWikiContent(content: string, title: string): WikiItem {
   
   // Combine all location entries
   if (locationEntries.length > 0) {
-    const locationParts = locationEntries.map((entry, idx) => {
+    const locationParts = locationEntries.map((entry) => {
       if (entry.name && entry.detail) {
         return `${entry.name} - ${entry.detail}`;
       } else if (entry.name) {
@@ -408,7 +506,7 @@ export async function searchItems(query: string): Promise<WikiItem[]> {
       return [];
     }
     
-    // Fetch page content for these titles
+    // Fetch page content for these titles (for item validation)
     const titlesParam = titles.map(t => encodeURIComponent(t)).join('|');
     const contentUrl = `${API_BASE}?action=query&titles=${titlesParam}&prop=revisions&rvprop=content&rvslots=main&format=json&origin=*`;
     const contentResponse = await fetch(contentUrl);
@@ -421,8 +519,9 @@ export async function searchItems(query: string): Promise<WikiItem[]> {
     const pages = contentData.query?.pages || {};
     
     // Parse each page and filter for equippable items only
-    const items: WikiItem[] = Object.values(pages)
-      .map(page => {
+    // Use action=parse to get rendered HTML for better section extraction
+    const items = await Promise.all(
+      Object.values(pages).map(async (page): Promise<WikiItem | null> => {
         // Get content from the correct path: revisions[0].slots.main["*"] or revisions[0].content
         const revision = page.revisions?.[0];
         const content = revision?.slots?.main?.["*"] || 
@@ -434,12 +533,44 @@ export async function searchItems(query: string): Promise<WikiItem[]> {
         if (!isEquippableItem(content)) {
           return null;
         }
+        
+        // Use action=parse to get rendered HTML for better section extraction
+        try {
+          const encodedTitle = encodeURIComponent(page.title);
+          const parseUrl = `${API_BASE}?action=parse&page=${encodedTitle}&prop=text&format=json&formatversion=2&origin=*`;
+          const parseResponse = await fetch(parseUrl);
+          
+          if (parseResponse.ok) {
+            const parseData: ParseResponse = await parseResponse.json();
+            const html = parseData.parse?.text?.["*"] || '';
+            
+            // Parse the item with both raw content and HTML
+            const item = parseWikiContent(content, page.title);
+            
+            // Extract "where to find" from HTML if available
+            if (html) {
+              const whereToFind = extractWhereToFindFromHTML(html);
+              if (whereToFind) {
+                item.where_to_find = whereToFind;
+              }
+            }
+            
+            return item;
+          }
+        } catch (parseError) {
+          console.warn(`Failed to parse HTML for ${page.title}:`, parseError);
+        }
+        
+        // Fallback to original parsing if HTML parse fails
         return parseWikiContent(content, page.title);
       })
-      .filter((item): item is WikiItem => item !== null && !!item.name); // Filter out null and invalid items
+    );
+    
+    // Filter out null and invalid items
+    const validItems: WikiItem[] = items.filter((item): item is WikiItem => item !== null && !!item.name);
     
     // Sort by relevance (exact matches first)
-    return items.sort((a, b) => {
+    return validItems.sort((a, b) => {
       const aExact = a.name.toLowerCase() === query.toLowerCase();
       const bExact = b.name.toLowerCase() === query.toLowerCase();
       if (aExact && !bExact) return -1;
@@ -459,7 +590,7 @@ export async function getItemByName(name: string): Promise<WikiItem | null> {
   const encodedName = encodeURIComponent(name);
   
   try {
-    // First, try to get the page directly
+    // First, try to get the page directly (for item validation)
     const url = `${API_BASE}?action=query&titles=${encodedName}&prop=revisions&rvprop=content&rvslots=main&format=json&origin=*`;
     const response = await fetch(url);
     
@@ -485,7 +616,30 @@ export async function getItemByName(name: string): Promise<WikiItem | null> {
       
       // Only return if it's an equippable item
       if (content && isEquippableItem(content)) {
-        return parseWikiContent(content, page.title);
+        const item = parseWikiContent(content, page.title);
+        
+        // Use action=parse to get rendered HTML for better section extraction
+        try {
+          const parseUrl = `${API_BASE}?action=parse&page=${encodedName}&prop=text&format=json&formatversion=2&origin=*`;
+          const parseResponse = await fetch(parseUrl);
+          
+          if (parseResponse.ok) {
+            const parseData: ParseResponse = await parseResponse.json();
+            const html = parseData.parse?.text?.["*"] || '';
+            
+            // Extract "where to find" from HTML if available
+            if (html) {
+              const whereToFind = extractWhereToFindFromHTML(html);
+              if (whereToFind) {
+                item.where_to_find = whereToFind;
+              }
+            }
+          }
+        } catch (parseError) {
+          console.warn(`Failed to parse HTML for ${name}:`, parseError);
+        }
+        
+        return item;
       }
     }
     
